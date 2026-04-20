@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 # 設定頁面標題
 st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 
 st.title("預約報表自動統計系統")
-st.markdown("請上傳原始的「團體課預約報表」Excel 或 CSV 檔。")
+st.markdown("請上傳原始的「團體課預約報表」Excel 或 CSV 檔，並選擇篩選條件。")
 
 # 1. 定義老師排序順序
 TEACHER_ORDER = [
@@ -15,6 +16,22 @@ TEACHER_ORDER = [
     '品均', '妍語', '鈞弼', '竣升', '萃萃', '函豫', 
     '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫', '筠馨'
 ]
+
+# --- 新增：篩選條件 UI ---
+st.sidebar.header("篩選條件")
+selected_branch = st.sidebar.selectbox(
+    "1. 選擇館別", 
+    ["全部", "中山館", "高美館", "義昌館", "巨蛋館"]
+)
+
+# 日期區間預設為當月 1 號到今天
+today = datetime.today()
+first_day_of_month = today.replace(day=1)
+date_range = st.sidebar.date_input(
+    "2. 選擇日期區間",
+    value=(first_day_of_month, today),
+    help="選取開始與結束日期"
+)
 
 uploaded_file = st.file_uploader("選擇原始檔案 (Excel 或 CSV)", type=["xlsx", "csv"])
 
@@ -45,7 +62,26 @@ if uploaded_file is not None:
             st.error("無法辨識檔案編碼，請確認檔案是否損毀或嘗試存成標準 Excel 檔。")
             st.stop()
 
-        # 3. 資料清洗與排序
+        # --- 3. 資料清洗與篩選 ---
+        # 欄位名稱清理
+        df.columns = df.columns.str.strip()
+        
+        # 轉換日期格式 (容錯處理)
+        if '課程日期' in df.columns:
+            df['課程日期'] = pd.to_datetime(df['課程日期'], errors='coerce')
+            df = df.dropna(subset=['課程日期']) # 移除日期無效的列
+        
+        # A. 館別篩選 (假設欄位名稱為 '館別' 或 '分館')
+        branch_col = '館別' if '館別' in df.columns else ('分館' if '分館' in df.columns else None)
+        if branch_col and selected_branch != "全部":
+            df = df[df[branch_col].astype(str).str.contains(selected_branch)]
+        
+        # B. 日期區間篩選
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            df = df[(df['課程日期'].dt.date >= start_date) & (df['課程日期'].dt.date <= end_date)]
+
+        # 老師名稱與課程名稱清理
         df['授課老師'] = df['授課老師'].astype(str).str.strip()
         df['課程名稱'] = df['課程名稱'].astype(str).str.strip()
         
@@ -53,6 +89,7 @@ if uploaded_file is not None:
         if '課程時數(分鐘)' in df.columns:
             df['課程時數(分鐘)'] = pd.to_numeric(df['課程時數(分鐘)'], errors='coerce').fillna(0)
         
+        # 排序邏輯
         all_teachers_in_file = df['授課老師'].unique().tolist()
         final_order = TEACHER_ORDER + [t for t in all_teachers_in_file if t not in TEACHER_ORDER and t != 'nan']
 
@@ -60,7 +97,7 @@ if uploaded_file is not None:
         df_sorted = df.sort_values(by=['授課老師', '課程日期', '課程時間'])
         
         # 篩選核心資料
-        needed_cols = ['課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']
+        needed_cols = ['課程日期', '課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']
         actual_cols = [c for c in needed_cols if c in df_sorted.columns]
         df_final = df_sorted[actual_cols].copy()
 
@@ -68,7 +105,7 @@ if uploaded_file is not None:
         df_final = df_final[df_final['預約總人數'] > 0]
         df_final = df_final[~df_final['課程名稱'].str.contains('觀課')]
 
-        # 4. 計算統計表
+        # --- 4. 計算統計表 ---
         stats_columns = [
             '1v1', '1v1(1.5hr)', '1v2', '1v2(1.5hr)', 
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
@@ -86,12 +123,12 @@ if uploaded_file is not None:
                 continue
                 
             if '一對一' in course_name:
-                if duration == 90:
+                if duration >= 90:
                     df_stats.at[teacher, '1v1(1.5hr)'] += 1
                 else:
                     df_stats.at[teacher, '1v1'] += 1
             elif '一對二' in course_name:
-                if duration == 90:
+                if duration >= 90:
                     df_stats.at[teacher, '1v2(1.5hr)'] += 1
                 else:
                     df_stats.at[teacher, '1v2'] += 1
@@ -104,27 +141,36 @@ if uploaded_file is not None:
         df_stats = df_stats[df_stats['小計'] > 0]
 
         # --- 5. 介面呈現 ---
-        st.success("檔案處理成功！(已自動排除課程名稱包含「觀課」之項目)")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("統計表結果")
+        st.success(f"檔案處理成功！當前篩選：【{selected_branch}】 | 日期：{date_range[0]} 至 {date_range[1]}")
+        
+        # 顯示統計數據摘要
+        st.metric("總授課老師數", len(df_stats))
+        
+        tab1, tab2 = st.tabs(["📊 統計表結果", "📋 報表結果明細"])
+        
+        with tab1:
             st.dataframe(df_stats, use_container_width=True)
-        with col2:
-            st.subheader("報表結果明細")
-            st.dataframe(df_final, use_container_width=True)
+        with tab2:
+            # 格式化日期顯示
+            df_display = df_final.copy()
+            df_display['課程日期'] = df_display['課程日期'].dt.strftime('%Y-%m-%d')
+            st.dataframe(df_display, use_container_width=True)
 
         # 6. 下載功能
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_final.to_excel(writer, sheet_name='預約報表結果', index=False)
-            df_stats.to_excel(writer, sheet_name='統計表', index=True)
+            df_final.to_excel(writer, sheet_name='預約報表明細', index=False)
+            df_stats.to_excel(writer, sheet_name='統計總表', index=True)
+        
+        download_name = f"預約報表_{selected_branch}_{date_range[0]}_{date_range[1]}.xlsx"
         
         st.download_button(
-            label="下載 Excel 報表",
+            label="💾 下載篩選後的 Excel 報表",
             data=buffer.getvalue(),
-            file_name="預約報表分析結果.xlsx",
+            file_name=download_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
         st.error(f"發生非預期錯誤: {e}")
+        st.info("請檢查原始檔案中的欄位名稱是否正確（需包含：授課老師、課程名稱、預約總人數、課程日期、課程時數(分鐘)）")
