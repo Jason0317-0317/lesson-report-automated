@@ -28,7 +28,6 @@ with col_branch:
     )
 
 with col_date:
-    # 日期區間預設為當月 1 號到今天
     today = datetime.today()
     first_day_of_month = today.replace(day=1)
     date_range = st.date_input(
@@ -37,7 +36,6 @@ with col_date:
         help="請在日曆上選取開始與結束日期"
     )
 
-# 檢查日期選擇是否完整
 if len(date_range) != 2:
     st.warning("請在日曆上選擇完整的開始與結束日期。")
     st.stop()
@@ -48,9 +46,8 @@ uploaded_file = st.file_uploader("選擇原始檔案 (Excel 或 CSV)", type=["xl
 
 if uploaded_file is not None:
     try:
-        # --- 2. 超強容錯讀取邏輯 ---
+        # --- 2. 讀取邏輯 ---
         df = None
-        
         if uploaded_file.name.endswith(('.xlsx', '.xls')):
             try:
                 df = pd.read_excel(uploaded_file, skiprows=1)
@@ -68,23 +65,20 @@ if uploaded_file is not None:
                     continue
         
         if df is None:
-            st.error("無法辨識檔案編碼，請確認檔案是否損毀或嘗試存成標準 Excel 檔。")
+            st.error("無法辨識檔案編碼。")
             st.stop()
 
         # --- 3. 資料清洗與篩選 ---
         df.columns = df.columns.str.strip()
         
-        # 轉換日期格式
         if '課程日期' in df.columns:
             df['課程日期'] = pd.to_datetime(df['課程日期'], errors='coerce')
             df = df.dropna(subset=['課程日期'])
         
-        # 館別篩選
         branch_col = '館別' if '館別' in df.columns else ('分館' if '分館' in df.columns else None)
         if branch_col and selected_branch != "全部":
             df = df[df[branch_col].astype(str).str.contains(selected_branch)]
         
-        # 日期篩選
         start_date, end_date = date_range
         df = df[(df['課程日期'].dt.date >= start_date) & (df['課程日期'].dt.date <= end_date)]
 
@@ -94,7 +88,6 @@ if uploaded_file is not None:
         if '課程時數(分鐘)' in df.columns:
             df['課程時數(分鐘)'] = pd.to_numeric(df['課程時數(分鐘)'], errors='coerce').fillna(0)
         
-        # 老師排序
         all_teachers_in_file = df['授課老師'].unique().tolist()
         final_order = TEACHER_ORDER + [t for t in all_teachers_in_file if t not in TEACHER_ORDER and t != 'nan']
 
@@ -104,8 +97,6 @@ if uploaded_file is not None:
         needed_cols = ['課程日期', '課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']
         actual_cols = [c for c in needed_cols if c in df_sorted.columns]
         df_final = df_sorted[actual_cols].copy()
-
-        # 排除預約人數為 0 或觀課項目
         df_final = df_final[df_final['預約總人數'] > 0]
         df_final = df_final[~df_final['課程名稱'].str.contains('觀課')]
 
@@ -115,27 +106,21 @@ if uploaded_file is not None:
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
         df_stats = pd.DataFrame(0, index=final_order, columns=stats_columns)
-        df_stats.index.name = '姓名'
-
+        
         for _, row in df_final.iterrows():
             teacher = row['授課老師']
             course_name = row['課程名稱']
             count = row['預約總人數']
             duration = row.get('課程時數(分鐘)', 0)
             
-            if teacher not in final_order: 
-                continue
+            if teacher not in df_stats.index: continue
                 
             if '一對一' in course_name:
-                if duration >= 90:
-                    df_stats.at[teacher, '1v1(1.5hr)'] += 1
-                else:
-                    df_stats.at[teacher, '1v1'] += 1
+                if duration >= 90: df_stats.at[teacher, '1v1(1.5hr)'] += 1
+                else: df_stats.at[teacher, '1v1'] += 1
             elif '一對二' in course_name:
-                if duration >= 90:
-                    df_stats.at[teacher, '1v2(1.5hr)'] += 1
-                else:
-                    df_stats.at[teacher, '1v2'] += 1
+                if duration >= 90: df_stats.at[teacher, '1v2(1.5hr)'] += 1
+                else: df_stats.at[teacher, '1v2'] += 1
             else:
                 if 1 <= count <= 6:
                     col_name = f'團{int(count)}人'
@@ -144,23 +129,34 @@ if uploaded_file is not None:
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0]
 
-        # --- 5. 介面呈現 ---
+        # --- 5. 在統計表加入館別與日期資訊 ---
+        # 建立一個資訊列
+        info_df = pd.DataFrame(columns=df_stats.columns)
+        info_df.loc['統計館別'] = [selected_branch] + [''] * (len(df_stats.columns) - 1)
+        info_df.loc['統計區間'] = [f"{start_date} 至 {end_date}"] + [''] * (len(df_stats.columns) - 1)
+        info_df.loc['---'] = ['---'] * len(df_stats.columns)
+        
+        # 合併資訊列與統計數據
+        df_stats_with_info = pd.concat([info_df, df_stats])
+        df_stats_with_info.index.name = '姓名'
+
+        # --- 6. 介面呈現 ---
         st.success(f"檔案處理成功。當前篩選：{selected_branch} | 日期：{start_date} 至 {end_date}")
         
         tab1, tab2 = st.tabs(["統計表結果", "報表結果明細"])
         
         with tab1:
-            st.dataframe(df_stats, use_container_width=True)
+            st.dataframe(df_stats_with_info, use_container_width=True)
         with tab2:
             df_display = df_final.copy()
             df_display['課程日期'] = df_display['課程日期'].dt.strftime('%Y-%m-%d')
             st.dataframe(df_display, use_container_width=True)
 
-        # 6. 下載功能
+        # 7. 下載功能
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_final.to_excel(writer, sheet_name='預約報表明細', index=False)
-            df_stats.to_excel(writer, sheet_name='統計總表', index=True)
+            df_stats_with_info.to_excel(writer, sheet_name='統計總表', index=True)
         
         download_name = f"預約報表_{selected_branch}_{start_date}_{end_date}.xlsx"
         
