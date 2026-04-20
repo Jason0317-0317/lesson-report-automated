@@ -20,20 +20,33 @@ uploaded_file = st.file_uploader("選擇原始檔案 (Excel 或 CSV)", type=["xl
 
 if uploaded_file is not None:
     try:
-        # --- 2. 強化版讀取邏輯 ---
-        # 即使副檔名寫 xlsx，如果內容是 CSV 也能自動切換
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, skiprows=1, encoding='utf-8-sig')
-            else:
-                # 嘗試讀取 Excel，若失敗(例如其實是CSV)則跳到 except 處理
+        # --- 2. 超強容錯讀取邏輯 (解決編碼錯誤) ---
+        df = None
+        
+        # 檢查是否為 Excel
+        if uploaded_file.name.endswith(('.xlsx', '.xls')):
+            try:
                 df = pd.read_excel(uploaded_file, skiprows=1)
-        except Exception:
-            # 如果 read_excel 失敗，嘗試用 csv 讀取
-            uploaded_file.seek(0) # 指針歸零重新讀取
-            df = pd.read_csv(uploaded_file, skiprows=1, encoding='utf-8-sig')
+            except Exception:
+                # 有些檔案副檔名是 xlsx 但內容其實是 CSV，跳轉到 CSV 讀取
+                uploaded_file.seek(0)
+        
+        # 如果不是 Excel 或讀取失敗，嘗試 CSV
+        if df is None:
+            encodings = ['utf-8-sig', 'big5', 'cp950', 'gbk'] # 依序嘗試編碼
+            for enc in encodings:
+                try:
+                    uploaded_file.seek(0) # 每次嘗試前指針歸零
+                    df = pd.read_csv(uploaded_file, skiprows=1, encoding=enc)
+                    break # 成功讀取就跳出迴圈
+                except (UnicodeDecodeError, Exception):
+                    continue
+        
+        if df is None:
+            st.error("無法辨識檔案編碼，請確認檔案是否損毀或嘗試存成標準 Excel 檔。")
+            st.stop()
 
-        # 3. 資料清洗與排序
+        # 3. 資料清洗與排序 (維持原樣)
         df['授課老師'] = df['授課老師'].astype(str).str.strip()
         
         all_teachers_in_file = df['授課老師'].unique().tolist()
@@ -54,7 +67,6 @@ if uploaded_file is not None:
             teacher = row['授課老師']
             course_name = str(row['課程名稱'])
             count = row['預約總人數']
-            
             if teacher not in final_order: continue
                 
             if '一對一' in course_name:
@@ -72,11 +84,9 @@ if uploaded_file is not None:
         # --- 5. 介面呈現 ---
         st.success("檔案處理成功！")
         col1, col2 = st.columns(2)
-        
         with col1:
             st.subheader("✅ 統計表結果")
             st.dataframe(df_stats, use_container_width=True)
-
         with col2:
             st.subheader("📋 報表結果明細")
             st.dataframe(df_final, use_container_width=True)
@@ -95,5 +105,4 @@ if uploaded_file is not None:
         )
 
     except Exception as e:
-        st.error(f"❌ 處理失敗: {e}")
-        st.info("提示：如果出現 openpyxl 錯誤，請確認 GitHub 的 requirements.txt 裡有寫入 openpyxl。")
+        st.error(f"❌ 發生非預期錯誤: {e}")
