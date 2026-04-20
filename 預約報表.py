@@ -5,7 +5,7 @@ import io
 # 設定頁面標題
 st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 
-st.title("📊 預約報表自動統計系統")
+st.title("預約報表自動統計系統")
 st.markdown("請上傳原始的「團體課預約報表」Excel 或 CSV 檔。")
 
 # 1. 定義老師排序順序
@@ -85,10 +85,10 @@ if uploaded_file is not None:
         st.success("檔案處理成功！")
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("✅ 統計表結果")
+            st.subheader("統計表結果")
             st.dataframe(df_stats, use_container_width=True)
         with col2:
-            st.subheader("📋 報表結果明細")
+            st.subheader("報表結果明細")
             st.dataframe(df_final, use_container_width=True)
 
         # 6. 下載功能
@@ -98,11 +98,11 @@ if uploaded_file is not None:
             df_stats.to_excel(writer, sheet_name='統計表', index=True)
         
         st.download_button(
-            label="📥 下載 Excel 報表",
+            label="下載 Excel 報表",
             data=buffer.getvalue(),
             file_name="預約報表分析結果.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"❌ 發生非預期錯誤: {e}")
+        st.error(f"發生非預期錯誤: {e}")
