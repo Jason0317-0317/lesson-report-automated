@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 
 st.title("預約報表自動統計系統")
-st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」Excel 或 CSV 檔。")
+st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
 # 1. 定義老師排序順序
 TEACHER_ORDER = [
@@ -33,7 +33,7 @@ with col_date:
     date_range = st.date_input(
         "選擇日期區間",
         value=(first_day_of_month, today),
-        help="請在日曆上選取開始與結束日期"
+        help="請選取開始與結束日期"
     )
 
 if len(date_range) != 2:
@@ -46,7 +46,7 @@ uploaded_file = st.file_uploader("選擇原始檔案 (Excel 或 CSV)", type=["xl
 
 if uploaded_file is not None:
     try:
-        # --- 2. 讀取邏輯 ---
+        # --- 2. 檔案讀取 ---
         df = None
         if uploaded_file.name.endswith(('.xlsx', '.xls')):
             try:
@@ -61,7 +61,7 @@ if uploaded_file is not None:
                     uploaded_file.seek(0)
                     df = pd.read_csv(uploaded_file, skiprows=1, encoding=enc)
                     break
-                except (UnicodeDecodeError, Exception):
+                except:
                     continue
         
         if df is None:
@@ -88,33 +88,27 @@ if uploaded_file is not None:
         if '課程時數(分鐘)' in df.columns:
             df['課程時數(分鐘)'] = pd.to_numeric(df['課程時數(分鐘)'], errors='coerce').fillna(0)
         
-        all_teachers_in_file = df['授課老師'].unique().tolist()
-        final_order = TEACHER_ORDER + [t for t in all_teachers_in_file if t not in TEACHER_ORDER and t != 'nan']
-
-        df['授課老師'] = pd.Categorical(df['授課老師'], categories=final_order, ordered=True)
-        df_sorted = df.sort_values(by=['授課老師', '課程日期', '課程時間'])
-        
-        needed_cols = ['課程日期', '課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']
-        actual_cols = [c for c in needed_cols if c in df_sorted.columns]
-        df_final = df_sorted[actual_cols].copy()
-        df_final = df_final[df_final['預約總人數'] > 0]
-        df_final = df_final[~df_final['課程名稱'].str.contains('觀課')]
+        # 篩選掉觀課與人數為 0 的資料
+        df_filtered = df[(df['預約總人數'] > 0) & (~df['課程名稱'].str.contains('觀課'))].copy()
 
         # --- 4. 計算統計表 ---
         stats_columns = [
             '1v1', '1v1(1.5hr)', '1v2', '1v2(1.5hr)', 
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
-        df_stats = pd.DataFrame(0, index=final_order, columns=stats_columns)
         
-        for _, row in df_final.iterrows():
+        # 取得所有出現過的老師並依照指定順序排列
+        all_teachers = df_filtered['授課老師'].unique().tolist()
+        final_teacher_order = [t for t in TEACHER_ORDER if t in all_teachers] + [t for t in all_teachers if t not in TEACHER_ORDER]
+
+        df_stats = pd.DataFrame(0, index=final_teacher_order, columns=stats_columns)
+        
+        for _, row in df_filtered.iterrows():
             teacher = row['授課老師']
             course_name = row['課程名稱']
             count = row['預約總人數']
             duration = row.get('課程時數(分鐘)', 0)
             
-            if teacher not in df_stats.index: continue
-                
             if '一對一' in course_name:
                 if duration >= 90: df_stats.at[teacher, '1v1(1.5hr)'] += 1
                 else: df_stats.at[teacher, '1v1'] += 1
@@ -128,40 +122,57 @@ if uploaded_file is not None:
 
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0]
-
-        # --- 5. 在統計表加入館別與日期資訊 ---
-        # 建立一個資訊列
-        info_df = pd.DataFrame(columns=df_stats.columns)
-        info_df.loc['統計館別'] = [selected_branch] + [''] * (len(df_stats.columns) - 1)
-        info_df.loc['統計區間'] = [f"{start_date} 至 {end_date}"] + [''] * (len(df_stats.columns) - 1)
-        info_df.loc['---'] = ['---'] * len(df_stats.columns)
         
-        # 合併資訊列與統計數據
-        df_stats_with_info = pd.concat([info_df, df_stats])
-        df_stats_with_info.index.name = '姓名'
+        # 計算最後一行的合計
+        total_row = df_stats.sum().to_frame().T
+        total_row.index = ['合計']
+
+        # --- 5. 構建理想格式的 DataFrame (加上表頭資訊) ---
+        # 為了讓 Excel 和預覽都長一樣，我們把資訊放入 DataFrame
+        df_final_display = df_stats.reset_index().rename(columns={'index': '姓名'})
+        df_total_display = total_row.reset_index().rename(columns={'index': '姓名'})
+        
+        # 合併數據列與合計列
+        full_table = pd.concat([df_final_display, df_total_display], ignore_index=True)
+
+        # 建立資訊表頭列 (統計館別與統計區間)
+        # 欄位數要對齊
+        cols_count = len(full_table.columns)
+        info_rows = pd.DataFrame([
+            ['統計館別', selected_branch] + [''] * (cols_count - 2),
+            ['統計區間', f"{start_date} 至 {end_date}"] + [''] * (cols_count - 2)
+        ], columns=full_table.columns)
+
+        # 最終合併：資訊列 + 數據表
+        # 注意：為了讓 Streamlit 顯示整齊，我們在顯示時可以分開處理，但下載檔案必須完整
+        df_output = pd.concat([info_rows, full_table], ignore_index=True)
 
         # --- 6. 介面呈現 ---
-        st.success(f"檔案處理成功。當前篩選：{selected_branch} | 日期：{start_date} 至 {end_date}")
+        st.success(f"檔案處理成功。")
         
         tab1, tab2 = st.tabs(["統計表結果", "報表結果明細"])
         
         with tab1:
-            st.dataframe(df_stats_with_info, use_container_width=True)
+            # 顯示時將欄位名稱隱藏（因為第一、二列已經是資訊了）
+            st.dataframe(df_output, use_container_width=True, hide_index=True)
+            
         with tab2:
-            df_display = df_final.copy()
-            df_display['課程日期'] = df_display['課程日期'].dt.strftime('%Y-%m-%d')
-            st.dataframe(df_display, use_container_width=True)
+            df_detail = df_filtered[['課程日期', '課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']].copy()
+            df_detail['課程日期'] = df_detail['課程日期'].dt.strftime('%Y-%m-%d')
+            st.dataframe(df_detail, use_container_width=True, hide_index=True)
 
         # 7. 下載功能
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_final.to_excel(writer, sheet_name='預約報表明細', index=False)
-            df_stats_with_info.to_excel(writer, sheet_name='統計總表', index=True)
+            # 統計總表分頁
+            df_output.to_excel(writer, sheet_name='統計總表', index=False, header=False)
+            # 明細分頁
+            df_detail.to_excel(writer, sheet_name='預約報表明細', index=False)
         
         download_name = f"預約報表_{selected_branch}_{start_date}_{end_date}.xlsx"
         
         st.download_button(
-            label="下載篩選後的 Excel 報表",
+            label="下載 Excel 報表",
             data=buffer.getvalue(),
             file_name=download_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
