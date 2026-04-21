@@ -9,18 +9,18 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序
+# 1. 定義老師排序順序 (完全依照您要求的順序)
 TEACHER_ORDER = [
     '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
     '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
-    '品均', '妍語', '鈞弼', '變升', '萃文(萃萃)', '函豫', 
+    '品均', '妍語', '鈞弼', '竣升', '萃文(萃萃)', '函豫', 
     '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
 ]
 
 def teacher_sort_key(name):
-    # 確保名稱比對的準確性
     name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
+        # 使用包含比對來處理報表名稱可能帶有的英文名或空格
         if t_name in name_str or name_str in t_name:
             return i
     return len(TEACHER_ORDER)
@@ -125,7 +125,6 @@ if uploaded_file is not None:
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
         
-        # 建立統計表
         all_teachers = df_filtered[teacher_col].unique().tolist()
         df_stats = pd.DataFrame(0, index=all_teachers, columns=stats_columns)
         
@@ -146,13 +145,12 @@ if uploaded_file is not None:
                     col_name = f'團{count}人'
                     df_stats.at[teacher, col_name] += 1
 
-        # 加入小計並計算排序索引
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0].copy()
         
-        # 執行關鍵排序：根據定義的 TEACHER_ORDER 進行排序
-        df_stats['sort_idx'] = df_stats.index.map(teacher_sort_key)
-        df_stats = df_stats.sort_values('sort_idx').drop(columns=['sort_idx'])
+        # 強制進行自定義排序
+        df_stats['sort_key'] = df_stats.index.map(teacher_sort_key)
+        df_stats = df_stats.sort_values('sort_key').drop(columns=['sort_key'])
 
         total_row = df_stats.sum().to_frame().T
         total_row.index = ['合計']
