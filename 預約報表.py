@@ -9,18 +9,19 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序 (完全依照您要求的順序)
+# 1. 定義老師排序順序 (已將 漫漫(徐漫) 調整至 筠馨 之前)
 TEACHER_ORDER = [
     '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
     '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
     '品均', '妍語', '鈞弼', '竣升', '萃文(萃萃)', '函豫', 
-    '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
+    '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', 
+    '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
 ]
 
 def teacher_sort_key(name):
     name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
-        # 使用包含比對來處理報表名稱可能帶有的英文名或空格
+        # 採用包含比對，確保能對齊報表中帶有英文名或空格的姓名
         if t_name in name_str or name_str in t_name:
             return i
     return len(TEACHER_ORDER)
@@ -148,7 +149,7 @@ if uploaded_file is not None:
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0].copy()
         
-        # 強制進行自定義排序
+        # 關鍵排序：依照 TEACHER_ORDER 列表排序
         df_stats['sort_key'] = df_stats.index.map(teacher_sort_key)
         df_stats = df_stats.sort_values('sort_key').drop(columns=['sort_key'])
 
