@@ -9,20 +9,20 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序
+# 1. 定義老師排序順序 (針對報表名稱進行精準關鍵字設定)
 TEACHER_ORDER = [
-    '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
-    '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
-    '品均', '妍語', '鈞弼', '竣升', '萃文(萃萃)', '函豫', 
+    '意潔', '秀蓉', '怡廷', '佳蓁', '宛婷', '小在', 
+    '許力尹', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
+    '品均', '妍語', '鈞弼', '竣升', '萃萃', '萃文', '函豫', 
     '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', 
-    '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
+    '漫漫', '徐漫', '筠馨', '舒涵', '靜瑜'
 ]
 
 def teacher_sort_key(name):
     name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
-        # 採用包含比對，確保能對齊報表中帶有英文名或空格的姓名（如 漫漫 Mandy）
-        if t_name in name_str or name_str in t_name:
+        # 只要報表中的名字包含清單中的關鍵字 (例如 "徐漫" 包含在 "徐漫 Mandy" 裡) 就命中順序
+        if t_name in name_str:
             return i
     return len(TEACHER_ORDER)
 
@@ -55,7 +55,6 @@ uploaded_file = st.file_uploader("選擇原始檔案 (Excel 或 CSV)", type=["xl
 
 if uploaded_file is not None:
     try:
-        # --- 2. 智慧偵測標頭列函數 ---
         def get_clean_df(file):
             if file.name.endswith(('.xlsx', '.xls')):
                 temp_df = pd.read_excel(file, header=None, nrows=20)
@@ -87,7 +86,6 @@ if uploaded_file is not None:
             st.error("無法辨識檔案格式或找不到『課程日期』。")
             st.stop()
 
-        # --- 3. 欄位清洗 ---
         df.columns = df.columns.astype(str).str.strip()
         
         def find_col(possible_names):
@@ -149,7 +147,7 @@ if uploaded_file is not None:
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0].copy()
         
-        # 關鍵排序：依照 TEACHER_ORDER 列表排序
+        # 關鍵排序邏輯：將報表中的名字 (如 "徐漫 Mandy") 對應到 TEACHER_ORDER
         df_stats['sort_key'] = df_stats.index.map(teacher_sort_key)
         df_stats = df_stats.sort_values('sort_key').drop(columns=['sort_key'])
 
