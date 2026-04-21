@@ -88,8 +88,8 @@ if uploaded_file is not None:
         if '課程時數(分鐘)' in df.columns:
             df['課程時數(分鐘)'] = pd.to_numeric(df['課程時數(分鐘)'], errors='coerce').fillna(0)
         
-        # 篩選掉觀課與人數為 0 的資料
-        df_filtered = df[(df['預約總人數'] > 0) & (~df['課程名稱'].str.contains('觀課'))].copy()
+        # 篩選掉人數為 0 的資料 (保留觀課)
+        df_filtered = df[(df['預約總人數'] > 0)].copy()
 
         # --- 4. 計算統計表 ---
         stats_columns = [
@@ -128,32 +128,28 @@ if uploaded_file is not None:
         total_row.index = ['合計']
 
         # --- 5. 構建理想格式的 DataFrame (加上表頭資訊) ---
-        # 為了讓 Excel 和預覽都長一樣，我們把資訊放入 DataFrame
         df_final_display = df_stats.reset_index().rename(columns={'index': '姓名'})
         df_total_display = total_row.reset_index().rename(columns={'index': '姓名'})
         
         # 合併數據列與合計列
         full_table = pd.concat([df_final_display, df_total_display], ignore_index=True)
 
-        # 建立資訊表頭列 (統計館別與統計區間)
-        # 欄位數要對齊
+        # 建立資訊表頭列
         cols_count = len(full_table.columns)
         info_rows = pd.DataFrame([
             ['統計館別', selected_branch] + [''] * (cols_count - 2),
             ['統計區間', f"{start_date} 至 {end_date}"] + [''] * (cols_count - 2)
         ], columns=full_table.columns)
 
-        # 最終合併：資訊列 + 數據表
-        # 注意：為了讓 Streamlit 顯示整齊，我們在顯示時可以分開處理，但下載檔案必須完整
+        # 最終合併
         df_output = pd.concat([info_rows, full_table], ignore_index=True)
 
         # --- 6. 介面呈現 ---
-        st.success(f"檔案處理成功。")
+        st.success("檔案處理成功。")
         
         tab1, tab2 = st.tabs(["統計表結果", "報表結果明細"])
         
         with tab1:
-            # 顯示時將欄位名稱隱藏（因為第一、二列已經是資訊了）
             st.dataframe(df_output, use_container_width=True, hide_index=True)
             
         with tab2:
@@ -164,9 +160,7 @@ if uploaded_file is not None:
         # 7. 下載功能
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # 統計總表分頁
             df_output.to_excel(writer, sheet_name='統計總表', index=False, header=False)
-            # 明細分頁
             df_detail.to_excel(writer, sheet_name='預約報表明細', index=False)
         
         download_name = f"預約報表_{selected_branch}_{start_date}_{end_date}.xlsx"
