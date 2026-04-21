@@ -9,7 +9,7 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序 (已將 漫漫(徐漫) 調整至 筠馨 之前)
+# 1. 定義老師排序順序
 TEACHER_ORDER = [
     '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
     '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
@@ -21,7 +21,7 @@ TEACHER_ORDER = [
 def teacher_sort_key(name):
     name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
-        # 採用包含比對，確保能對齊報表中帶有英文名或空格的姓名
+        # 採用包含比對，確保能對齊報表中帶有英文名或空格的姓名（如 漫漫 Mandy）
         if t_name in name_str or name_str in t_name:
             return i
     return len(TEACHER_ORDER)
