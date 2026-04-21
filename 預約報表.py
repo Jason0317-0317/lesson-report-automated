@@ -97,7 +97,6 @@ if uploaded_file is not None:
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
         
-        # 取得所有出現過的老師並依照指定順序排列
         all_teachers = df_filtered['授課老師'].unique().tolist()
         final_teacher_order = [t for t in TEACHER_ORDER if t in all_teachers] + [t for t in all_teachers if t not in TEACHER_ORDER]
 
@@ -123,26 +122,28 @@ if uploaded_file is not None:
         df_stats['小計'] = df_stats.sum(axis=1)
         df_stats = df_stats[df_stats['小計'] > 0]
         
-        # 計算最後一行的合計
         total_row = df_stats.sum().to_frame().T
         total_row.index = ['合計']
 
-        # --- 5. 構建理想格式的 DataFrame (加上表頭資訊) ---
-        df_final_display = df_stats.reset_index().rename(columns={'index': '姓名'})
-        df_total_display = total_row.reset_index().rename(columns={'index': '姓名'})
+        # --- 5. 構建輸出格式 (關鍵修正：將 Header 轉化為 row) ---
+        df_final_data = df_stats.reset_index().rename(columns={'index': '姓名'})
+        df_total_data = total_row.reset_index().rename(columns={'index': '姓名'})
         
-        # 合併數據列與合計列
-        full_table = pd.concat([df_final_display, df_total_display], ignore_index=True)
+        # 數據與合計
+        full_table_content = pd.concat([df_final_data, df_total_data], ignore_index=True)
+
+        # 取得目前的欄位名稱 (姓名, 1v1, 1v1(1.5hr)...)
+        header_row = pd.DataFrame([full_table_content.columns.tolist()], columns=full_table_content.columns)
 
         # 建立資訊表頭列
-        cols_count = len(full_table.columns)
+        cols_count = len(full_table_content.columns)
         info_rows = pd.DataFrame([
             ['統計館別', selected_branch] + [''] * (cols_count - 2),
             ['統計區間', f"{start_date} 至 {end_date}"] + [''] * (cols_count - 2)
-        ], columns=full_table.columns)
+        ], columns=full_table_content.columns)
 
-        # 最終合併
-        df_output = pd.concat([info_rows, full_table], ignore_index=True)
+        # 最終合併順序：資訊列 -> 欄位標題列 -> 數據內容
+        df_output = pd.concat([info_rows, header_row, full_table_content], ignore_index=True)
 
         # --- 6. 介面呈現 ---
         st.success("檔案處理成功。")
@@ -150,7 +151,8 @@ if uploaded_file is not None:
         tab1, tab2 = st.tabs(["統計表結果", "報表結果明細"])
         
         with tab1:
-            st.dataframe(df_output, use_container_width=True, hide_index=True)
+            # 使用 hide_index=True 且不顯示 DataFrame 預設 Header，因為我們已經把 Header 做在內容裡了
+            st.dataframe(df_output, use_container_width=True, hide_index=True, header_rows=0)
             
         with tab2:
             df_detail = df_filtered[['課程日期', '課程名稱', '授課老師', '預約總人數', '課程時數(分鐘)']].copy()
@@ -160,6 +162,7 @@ if uploaded_file is not None:
         # 7. 下載功能
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # 下載時 index=False, header=False 確保輸出的 Excel 跟畫面上看到的一樣整齊
             df_output.to_excel(writer, sheet_name='統計總表', index=False, header=False)
             df_detail.to_excel(writer, sheet_name='預約報表明細', index=False)
         
