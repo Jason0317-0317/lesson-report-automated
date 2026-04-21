@@ -133,11 +133,11 @@ if uploaded_file is not None:
             duration = row[duration_col] if duration_col else 60
             
             if '一對一' in course_name:
-                if duration >= 90: df_stats.at[teacher, '1v1(1.5hr)'] += 1
-                else: df_stats.at[teacher, '1v1'] += 1
+                if duration >= 90: df_stats.at[teacher, '1對1(1.5hr)'] += 1
+                else: df_stats.at[teacher, '1對1'] += 1
             elif '一對二' in course_name:
-                if duration >= 90: df_stats.at[teacher, '1v2(1.5hr)'] += 1
-                else: df_stats.at[teacher, '1v2'] += 1
+                if duration >= 90: df_stats.at[teacher, '1對2(1.5hr)'] += 1
+                else: df_stats.at[teacher, '1對2'] += 1
             else:
                 if 1 <= count <= 6:
                     col_name = f'團{count}人'
