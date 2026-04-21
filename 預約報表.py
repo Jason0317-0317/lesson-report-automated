@@ -9,26 +9,21 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序 (已根據您的清單更新，並對齊報表可能的完整名稱)
+# 1. 定義老師排序順序
 TEACHER_ORDER = [
     '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
     '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
-    '品均', '妍語', '鈞弼', '竣升', '萃文(萃萃)', '函豫', 
+    '品均', '妍語', '鈞弼', '變升', '萃文(萃萃)', '函豫', 
     '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
 ]
 
-# 建議的排序處理邏輯：
-# 因為原始報表名稱可能是 "佳蓁 Rita"，我們用 map 來確保排序正確
 def teacher_sort_key(name):
-    # 檢查報表中的名字是否包含在定義的排序清單中（或清單中的名字是報表名字的前綴）
+    # 確保名稱比對的準確性
+    name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
-        if t_name in name or name in t_name:
+        if t_name in name_str or name_str in t_name:
             return i
-    return len(TEACHER_ORDER)  # 若不在名單內則排到最後
-
-# 應用排序範例 (假設 df 是您的資料表):
-# df['sort_key'] = df['授課老師'].apply(teacher_sort_key)
-# df = df.sort_values(by=['sort_key', '課程日期']).drop(columns=['sort_key'])
+    return len(TEACHER_ORDER)
 
 # --- 篩選條件區塊 ---
 st.markdown("### 1. 設定篩選條件")
@@ -62,10 +57,8 @@ if uploaded_file is not None:
         # --- 2. 智慧偵測標頭列函數 ---
         def get_clean_df(file):
             if file.name.endswith(('.xlsx', '.xls')):
-                # 讀取前 20 列來找標頭
                 temp_df = pd.read_excel(file, header=None, nrows=20)
                 file.seek(0)
-                
                 target_row = 0
                 for i, row in temp_df.iterrows():
                     row_str = " ".join([str(x) for x in row.values])
@@ -74,7 +67,6 @@ if uploaded_file is not None:
                         break
                 return pd.read_excel(file, skiprows=target_row)
             else:
-                # CSV 處理
                 encodings = ['utf-8-sig', 'big5', 'cp950', 'gbk']
                 for enc in encodings:
                     try:
@@ -115,11 +107,9 @@ if uploaded_file is not None:
             st.error(f"缺少必要欄位。偵測到的欄位有：{list(df.columns)}")
             st.stop()
 
-        # 資料轉換
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         df = df.dropna(subset=[date_col])
         
-        # 篩選館別與日期
         if branch_col and selected_branch != "全部":
             df = df[df[branch_col].astype(str).str.contains(selected_branch)]
         
@@ -135,10 +125,9 @@ if uploaded_file is not None:
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
         
+        # 建立統計表
         all_teachers = df_filtered[teacher_col].unique().tolist()
-        final_teacher_order = [t for t in TEACHER_ORDER if t in all_teachers] + [t for t in all_teachers if t not in TEACHER_ORDER]
-
-        df_stats = pd.DataFrame(0, index=final_teacher_order, columns=stats_columns)
+        df_stats = pd.DataFrame(0, index=all_teachers, columns=stats_columns)
         
         for _, row in df_filtered.iterrows():
             teacher = str(row[teacher_col]).strip()
@@ -157,8 +146,14 @@ if uploaded_file is not None:
                     col_name = f'團{count}人'
                     df_stats.at[teacher, col_name] += 1
 
+        # 加入小計並計算排序索引
         df_stats['小計'] = df_stats.sum(axis=1)
-        df_stats = df_stats[df_stats['小計'] > 0]
+        df_stats = df_stats[df_stats['小計'] > 0].copy()
+        
+        # 執行關鍵排序：根據定義的 TEACHER_ORDER 進行排序
+        df_stats['sort_idx'] = df_stats.index.map(teacher_sort_key)
+        df_stats = df_stats.sort_values('sort_idx').drop(columns=['sort_idx'])
+
         total_row = df_stats.sum().to_frame().T
         total_row.index = ['合計']
 
