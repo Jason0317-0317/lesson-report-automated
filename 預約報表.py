@@ -9,13 +9,26 @@ st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
 st.title("預約報表自動統計系統")
 st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
 
-# 1. 定義老師排序順序
+# 1. 定義老師排序順序 (已根據您的清單更新，並對齊報表可能的完整名稱)
 TEACHER_ORDER = [
     '意潔', '秀蓉ViVi', '怡廷', '佳蓁', '宛婷', '小在', 
-    '力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
-    '品均', '妍語', '鈞弼', '竣升', '萃萃', '函豫', 
-    '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫', '筠馨'
+    '許力尹LOUIS', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
+    '品均', '妍語', '鈞弼', '竣升', '萃文(萃萃)', '函豫', 
+    '子綺', '楷翌', '懿庭', '俐池', '姿菁', '郁雯', '漫漫(徐漫)', '筠馨', '舒涵', '靜瑜'
 ]
+
+# 建議的排序處理邏輯：
+# 因為原始報表名稱可能是 "佳蓁 Rita"，我們用 map 來確保排序正確
+def teacher_sort_key(name):
+    # 檢查報表中的名字是否包含在定義的排序清單中（或清單中的名字是報表名字的前綴）
+    for i, t_name in enumerate(TEACHER_ORDER):
+        if t_name in name or name in t_name:
+            return i
+    return len(TEACHER_ORDER)  # 若不在名單內則排到最後
+
+# 應用排序範例 (假設 df 是您的資料表):
+# df['sort_key'] = df['授課老師'].apply(teacher_sort_key)
+# df = df.sort_values(by=['sort_key', '課程日期']).drop(columns=['sort_key'])
 
 # --- 篩選條件區塊 ---
 st.markdown("### 1. 設定篩選條件")
