@@ -21,7 +21,6 @@ TEACHER_ORDER = [
 def teacher_sort_key(name):
     name_str = str(name)
     for i, t_name in enumerate(TEACHER_ORDER):
-        # 只要報表中的名字包含清單中的關鍵字 (例如 "徐漫" 包含在 "徐漫 Mandy" 裡) 就命中順序
         if t_name in name_str:
             return i
     return len(TEACHER_ORDER)
