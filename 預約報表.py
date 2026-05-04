@@ -198,10 +198,18 @@ if uploaded_file is not None:
                 ['統計館別', selected_branch],
                 ['統計區間', f"{start_date} 至 {end_date}"]
             ])
+            # --- 活頁簿 1：統計總表 ---
             info_df.to_excel(writer, sheet_name='統計總表', index=False, header=False, startrow=0)
             df_transposed.to_excel(writer, sheet_name='統計總表', startrow=3)
+            
+            # --- 活頁簿 2：統計總表2 (目前邏輯與總表相同，預留修改空間) ---
+            # 這裡我們先將 df_transposed 賦值給一個新變數，方便你之後針對此變數修改邏輯
+            df_transposed_v2 = df_transposed.copy() 
+            info_df.to_excel(writer, sheet_name='統計總表2', index=False, header=False, startrow=0)
+            df_transposed_v2.to_excel(writer, sheet_name='統計總表2', startrow=3)
+            
+            # --- 活頁簿 3：預約報表明細 ---
             df_filtered.to_excel(writer, sheet_name='預約報表明細', index=False)
-        
         st.download_button(
             label="下載橫向 Excel 報表",
             data=buffer.getvalue(),
