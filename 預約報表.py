@@ -200,31 +200,35 @@ if uploaded_file is not None:
                 ['統計區間', f"{start_date} 至 {end_date}"]
             ])
             
-            # --- 活頁簿 1：統計總表 (保持原樣) ---
+            # --- 活頁簿 1：統計總表 (原始版本) ---
             info_df.to_excel(writer, sheet_name='統計總表', index=False, header=False, startrow=0)
             df_transposed.to_excel(writer, sheet_name='統計總表', startrow=3)
             
             # --- 活頁簿 2：統計總表2 (合併 團1-2人) ---
             df_transposed_v2 = df_transposed.copy()
-            
-            # 檢查「團1人」與「團2人」是否存在於索引中，避免報錯
             if '團1人' in df_transposed_v2.index and '團2人' in df_transposed_v2.index:
-                # 1. 計算總和並新增一行「團1-2人」
+                # 計算合併數值
                 df_transposed_v2.loc['團1-2人'] = df_transposed_v2.loc['團1人'] + df_transposed_v2.loc['團2人']
-                
-                # 2. 刪除原本舊的「團1人」與「團2人」行
+                # 刪除舊欄位
                 df_transposed_v2 = df_transposed_v2.drop(['團1人', '團2人'])
-                
-                # 3. (選優) 調整順序：將「團1-2人」移回原本團體課程的位置 (或是你可以自訂順序)
-                # 這裡簡單處理，如果不調整，它會出現在「小計」之後
-                current_order = list(df_transposed_v2.index)
-                if '團1-2人' in current_order:
-                    current_order.remove('團1-2人')
-                    current_order.insert(0, '團1-2人') # 放在最前面
-                    df_transposed_v2 = df_transposed_v2.reindex(current_order)
+                # 重新排序索引，將「團1-2人」移至最上方
+                new_index = ['團1-2人'] + [i for i in df_transposed_v2.index if i != '團1-2人']
+                df_transposed_v2 = df_transposed_v2.reindex(new_index)
 
             info_df.to_excel(writer, sheet_name='統計總表2', index=False, header=False, startrow=0)
             df_transposed_v2.to_excel(writer, sheet_name='統計總表2', startrow=3)
             
             # --- 活頁簿 3：預約報表明細 ---
             df_filtered.to_excel(writer, sheet_name='預約報表明細', index=False)
+
+        # 這裡非常重要：必須補上對應最外層 try 的 except 區塊
+        st.download_button(
+            label="下載橫向 Excel 報表",
+            data=buffer.getvalue(),
+            file_name=f"預約統計_{selected_branch}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    except Exception as e:
+        st.error(f"處理失敗: {e}")
+        st.exception(e)
