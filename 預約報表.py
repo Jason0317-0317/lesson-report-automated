@@ -4,12 +4,12 @@ import io
 from datetime import datetime
 
 # 設定頁面標題
-st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
+st.set_page_config(page_title="預約報表自動統計工具 (橫向版)", layout="wide")
 
-st.title("預約報表自動統計系統")
-st.markdown("請設定篩選條件並上傳原始的「團體課預約報表」檔案。")
+st.title("預約報表自動統計系統 - 橫向報表")
+st.markdown("此版本會將 **課程項目顯示於直排**，**老師姓名顯示於橫排**。")
 
-# 1. 定義老師排序順序 (針對報表名稱進行精準關鍵字設定)
+# 1. 定義老師排序順序
 TEACHER_ORDER = [
     '意潔', '秀蓉', '怡廷', '佳蓁', '宛婷', '小在', 
     '許力尹', '顥顥', '睿絃', '儒蓁', '翎瑋', '奕伶', 
@@ -105,6 +105,7 @@ if uploaded_file is not None:
             st.error(f"缺少必要欄位。偵測到的欄位有：{list(df.columns)}")
             st.stop()
 
+        # 資料清洗與篩選
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         df = df.dropna(subset=[date_col])
         
@@ -118,13 +119,14 @@ if uploaded_file is not None:
         df_filtered = df[df[count_col] > 0].copy()
 
         # --- 4. 統計邏輯 ---
-        stats_columns = [
+        stats_items = [
             '1對1', '1對1(1.5hr)', '1對2', '1對2(1.5hr)', 
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
         ]
         
         all_teachers = df_filtered[teacher_col].unique().tolist()
-        df_stats = pd.DataFrame(0, index=all_teachers, columns=stats_columns)
+        # 先以 老師為橫、項目為縱 建立 DataFrame (稍後轉置)
+        df_stats = pd.DataFrame(0, index=all_teachers, columns=stats_items)
         
         for _, row in df_filtered.iterrows():
             teacher = str(row[teacher_col]).strip()
@@ -143,49 +145,58 @@ if uploaded_file is not None:
                     col_name = f'團{count}人'
                     df_stats.at[teacher, col_name] += 1
 
+        # 計算每位老師的小計
         df_stats['小計'] = df_stats.sum(axis=1)
-        df_stats = df_stats[df_stats['小計'] > 0].copy()
         
-        # 關鍵排序邏輯：將報表中的名字 (如 "徐漫 Mandy") 對應到 TEACHER_ORDER
+        # 排序老師 (列)
         df_stats['sort_key'] = df_stats.index.map(teacher_sort_key)
         df_stats = df_stats.sort_values('sort_key').drop(columns=['sort_key'])
 
+        # 計算項目的合計 (這會變成轉置後的最下面一行)
         total_row = df_stats.sum().to_frame().T
         total_row.index = ['合計']
+        df_final_with_total = pd.concat([df_stats, total_row])
 
-        # --- 5. 格式化輸出 ---
-        df_final_data = df_stats.reset_index().rename(columns={'index': '姓名'})
-        df_total_data = total_row.reset_index().rename(columns={'index': '姓名'})
-        full_table = pd.concat([df_final_data, df_total_data], ignore_index=True)
+        # --- 關鍵步驟：轉置 (Transpose) ---
+        # 轉置後：Index 變成了 課程項目，Columns 變成了 老師姓名
+        df_transposed = df_final_with_total.T
+        df_transposed.index.name = "課程項目 \ 姓名"
 
-        header_row = pd.DataFrame([full_table.columns.tolist()], columns=full_table.columns)
-        info_rows = pd.DataFrame([
-            ['統計館別', selected_branch] + [''] * (len(full_table.columns) - 2),
-            ['統計區間', f"{start_date} 至 {end_date}"] + [''] * (len(full_table.columns) - 2)
-        ], columns=full_table.columns)
-
-        df_output = pd.concat([info_rows, header_row, full_table], ignore_index=True)
-
-        # --- 6. 介面呈現 ---
+        # --- 5. 介面呈現 ---
         st.success("檔案處理成功。")
-        tab1, tab2 = st.tabs(["統計表結果", "原始明細對照"])
+        
+        # 顯示統計資訊
+        st.info(f"統計館別：{selected_branch} | 統計區間：{start_date} 至 {end_date}")
+
+        tab1, tab2 = st.tabs(["橫向統計表", "原始明細對照"])
         with tab1:
-            st.dataframe(df_output, use_container_width=True, hide_index=True)
+            st.dataframe(df_transposed, use_container_width=False) # 橫向表不強迫擠在寬度內
         with tab2:
             st.dataframe(df_filtered[[date_col, course_col, teacher_col, count_col]], use_container_width=True, hide_index=True)
 
-        # 7. 下載
+        # 6. 下載 Excel
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_output.to_excel(writer, sheet_name='統計總表', index=False, header=False)
+            # 寫入資訊
+            info_df = pd.DataFrame([
+                ['統計館別', selected_branch],
+                ['統計區間', f"{start_date} 至 {end_date}"]
+            ])
+            info_df.to_excel(writer, sheet_name='統計總表', index=False, header=False, startrow=0)
+            
+            # 從第 4 行開始寫入轉置後的統計表
+            df_transposed.to_excel(writer, sheet_name='統計總表', startrow=3)
+            
+            # 明細分頁
             df_filtered.to_excel(writer, sheet_name='預約報表明細', index=False)
         
         st.download_button(
-            label="下載 Excel 報表",
+            label="下載橫向 Excel 報表",
             data=buffer.getvalue(),
-            file_name=f"預約統計_{selected_branch}.xlsx",
+            file_name=f"預約統計_{selected_branch}_橫向.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
         st.error(f"處理失敗: {e}")
+        st.exception(e) # 顯示詳細錯誤資訊方便除錯
