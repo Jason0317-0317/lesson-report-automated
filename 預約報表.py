@@ -121,11 +121,9 @@ if uploaded_file is not None:
         # --- 4. 統計邏輯 ---
         stats_items = [
             '團1人', '團2人', '團3人', '團4人', '團5人', '團6人',
-            '1對2(1.5hr)','1對2', '1對1(1.5hr)', '1對1' 
+            '1對2(1.5hr)', '1對2', '1對1(1.5hr)', '1對1', '觀課'
         ]
-        
         all_teachers = df_filtered[teacher_col].unique().tolist()
-        # 先以 老師為橫、項目為縱 建立 DataFrame (稍後轉置)
         df_stats = pd.DataFrame(0, index=all_teachers, columns=stats_items)
         
         for _, row in df_filtered.iterrows():
@@ -133,8 +131,9 @@ if uploaded_file is not None:
             course_name = str(row[course_col]).strip()
             count = int(row[count_col])
             duration = row[duration_col] if duration_col else 60
-            
-            if '一對一' in course_name:
+            if '觀課' in course_name:
+                df_stats.at[teacher, '觀課'] += 1
+            elif '一對一' in course_name:
                 if duration >= 90: df_stats.at[teacher, '1對1(1.5hr)'] += 1
                 else: df_stats.at[teacher, '1對1'] += 1
             elif '一對二' in course_name:
