@@ -194,29 +194,37 @@ if uploaded_file is not None:
         # 6. 下載 Excel
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # 寫入資訊
             info_df = pd.DataFrame([
                 ['統計館別', selected_branch],
                 ['統計區間', f"{start_date} 至 {end_date}"]
             ])
-            # --- 活頁簿 1：統計總表 ---
+            
+            # --- 活頁簿 1：統計總表 (保持原樣) ---
             info_df.to_excel(writer, sheet_name='統計總表', index=False, header=False, startrow=0)
             df_transposed.to_excel(writer, sheet_name='統計總表', startrow=3)
             
-            # --- 活頁簿 2：統計總表2 (目前邏輯與總表相同，預留修改空間) ---
-            # 這裡我們先將 df_transposed 賦值給一個新變數，方便你之後針對此變數修改邏輯
-            df_transposed_v2 = df_transposed.copy() 
+            # --- 活頁簿 2：統計總表2 (合併 團1-2人) ---
+            df_transposed_v2 = df_transposed.copy()
+            
+            # 檢查「團1人」與「團2人」是否存在於索引中，避免報錯
+            if '團1人' in df_transposed_v2.index and '團2人' in df_transposed_v2.index:
+                # 1. 計算總和並新增一行「團1-2人」
+                df_transposed_v2.loc['團1-2人'] = df_transposed_v2.loc['團1人'] + df_transposed_v2.loc['團2人']
+                
+                # 2. 刪除原本舊的「團1人」與「團2人」行
+                df_transposed_v2 = df_transposed_v2.drop(['團1人', '團2人'])
+                
+                # 3. (選優) 調整順序：將「團1-2人」移回原本團體課程的位置 (或是你可以自訂順序)
+                # 這裡簡單處理，如果不調整，它會出現在「小計」之後
+                current_order = list(df_transposed_v2.index)
+                if '團1-2人' in current_order:
+                    current_order.remove('團1-2人')
+                    current_order.insert(0, '團1-2人') # 放在最前面
+                    df_transposed_v2 = df_transposed_v2.reindex(current_order)
+
             info_df.to_excel(writer, sheet_name='統計總表2', index=False, header=False, startrow=0)
             df_transposed_v2.to_excel(writer, sheet_name='統計總表2', startrow=3)
             
             # --- 活頁簿 3：預約報表明細 ---
             df_filtered.to_excel(writer, sheet_name='預約報表明細', index=False)
-        st.download_button(
-            label="下載橫向 Excel 報表",
-            data=buffer.getvalue(),
-            file_name=f"預約統計_{selected_branch}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-        st.error(f"處理失敗: {e}")
-        st.exception(e)
