@@ -4,9 +4,8 @@ import io
 from datetime import datetime
 
 # 設定頁面標題
-st.set_page_config(page_title="預約報表自動統計工具 (橫向版)", layout="wide")
-
-st.title("預約報表自動統計系統 - 橫向報表")
+st.set_page_config(page_title="預約報表自動統計工具", layout="wide")
+st.title("預約報表自動統計系統")
 st.markdown("此版本會將 **課程項目顯示於直排**，**老師姓名顯示於橫排**。")
 
 # 1. 定義老師排序順序
