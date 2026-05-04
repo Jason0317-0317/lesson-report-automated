@@ -120,8 +120,8 @@ if uploaded_file is not None:
 
         # --- 4. 統計邏輯 ---
         stats_items = [
-            '1對1', '1對1(1.5hr)', '1對2', '1對2(1.5hr)', 
-            '團1人', '團2人', '團3人', '團4人', '團5人', '團6人'
+            '團1人', '團2人', '團3人', '團4人', '團5人', '團6人',
+            '1對2(1.5hr)','1對2', '1對1(1.5hr)', '1對1' 
         ]
         
         all_teachers = df_filtered[teacher_col].unique().tolist()
